@@ -1,0 +1,97 @@
+<template>
+  <div class="demo-page">
+    <text class="title">{{ $t("a.b") }},欢迎打开{{ title }}</text>
+    <!-- 点击跳转详情页 -->
+    <input class="btn" type="button" value="跳转到详情页" onclick="login" />
+    <text>{{ response }}</text>
+  </div>
+</template>
+
+<script>
+import router from "@system.router";
+import fetch from "@system.fetch";
+import crypto from "@system.crypto";
+import configuration from "@system.configuration";
+
+export default {
+	// 页面级组件的数据模型，影响传入数据的覆盖机制：private内定义的属性不允许被覆盖
+	private: {
+		title: "示例页面",
+		response: "111",
+	},
+	login() {
+		try {
+			const msgUrl = `https://account.xiaomi.com/pass/serviceLogin?sid=xiaomiio&_json=true`;
+			const loginUrl = "https://account.xiaomi.com/pass/serviceLoginAuth2";
+			const tempStr = "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+			let deviceId = "";
+			for (let i = 0; i < 16; i++) {
+				deviceId += tempStr.charAt(Math.floor(Math.random() * tempStr.length));
+			}
+			let authorize = {};
+			const userAgent = "APP/com.xiaomi.mihome APPV/6.0.103 iosPassportSDK/3.9.0 iOS/14.4 miHSTS";
+			const header = {
+				"User-Agent": userAgent,
+				Accept: "*/*",
+				"Accept-Language": "zh-tw",
+				Cookie: `deviceId=${deviceId}; sdkVersion=3.4.1`,
+			};
+
+			fetch.fetch({
+				url: msgUrl,
+				header,
+				method: "GET",
+				success: (response) => {
+          let result = JSON.parse(response.substring(11));
+          let body = {
+            qs: result.qs,
+            sid: result.sid,
+            _sign: result._sign,
+            callback: result.callback,
+            user: '18845613469',
+            hash: crypto.hashDigest({
+              data: 'LiYiFan000312',
+              algo: 'MD5'
+            }).toUpperCase().padEnd(32, '0'),
+            _json: 'true'
+        };
+        fetch.fetch({
+          url: loginUrl,
+          data: body,
+          method: 'POST',
+          header,
+          success: (rsp) => {
+            this.response = rsp
+          }
+        })
+				},
+			});
+		} catch (error) {
+			this.response = error;
+		}
+	},
+};
+</script>
+
+<style>
+.demo-page {
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+}
+
+.title {
+	font-size: 20px;
+	text-align: center;
+}
+
+.btn {
+	width: 200px;
+	height: 40px;
+	margin-top: 20px;
+	border-radius: 5px;
+	background-color: #09ba07;
+	font-size: 20px;
+	color: #ffffff;
+}
+</style>
