@@ -1,28 +1,22 @@
 <template>
   <div class="demo-page">
-    <text class="title">{{ $t("a.b") }},欢迎打开{{ title }}</text>
-    <!-- 点击跳转详情页 -->
-    <input class="btn" type="button" value="跳转到详情页" onclick="login" />
-    <text>{{ response }}</text>
+    <input class="btn" type="button" value="登录" onclick="login" />
+    <input class="btn" type="button" value="开灯" onclick="lightOn" />
+    <input class="btn" type="button" value="关灯" onclick="lightOff" />
   </div>
 </template>
 
 <script>
-import router from "@system.router";
 import fetch from "@system.fetch";
 import crypto from "@system.crypto";
-import configuration from "@system.configuration";
+import file from "@system.file";
 
 export default {
 	// 页面级组件的数据模型，影响传入数据的覆盖机制：private内定义的属性不允许被覆盖
 	private: {
-		title: "示例页面",
-		response: "111",
 	},
-	login() {
+	async login() {
 		try {
-			const msgUrl = `https://account.xiaomi.com/pass/serviceLogin?sid=xiaomiio&_json=true`;
-			const loginUrl = "https://account.xiaomi.com/pass/serviceLoginAuth2";
 			const tempStr = "1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 			let deviceId = "";
 			for (let i = 0; i < 16; i++) {
@@ -37,39 +31,118 @@ export default {
 				Cookie: `deviceId=${deviceId}; sdkVersion=3.4.1`,
 			};
 
+			let body = await this.fetchMsg(header)
+			authorize = await this.doLogin(header, body).catch(error => {
+				console.error('登录失败！', error);
+			})
+			authorize.deviceId = deviceId;
+			authorize.sid = "xiaomiio";
+
+			await this.saveAuthorize(JSON.stringify(authorize));
+		} catch (error) {
+			console.error('123456', JSON.stringify(error))
+		}
+	},
+	async fetchMsg(header) {
+		const msgUrl = `https://account.xiaomi.com/pass/serviceLogin?sid=xiaomiio&_json=true`;
+		return new Promise((resolve, reject) => {
 			fetch.fetch({
 				url: msgUrl,
 				header,
-				method: "GET",
-				success: (response) => {
-          let result = JSON.parse(response.substring(11));
-          let body = {
-            qs: result.qs,
-            sid: result.sid,
-            _sign: result._sign,
-            callback: result.callback,
-            user: '18845613469',
-            hash: crypto.hashDigest({
-              data: 'LiYiFan000312',
-              algo: 'MD5'
-            }).toUpperCase().padEnd(32, '0'),
-            _json: 'true'
-        };
-        fetch.fetch({
-          url: loginUrl,
-          data: body,
-          method: 'POST',
-          header,
-          success: (rsp) => {
-            this.response = rsp
-          }
-        })
-				},
+				method: "GET"
+			}).then(response => {
+				let result = JSON.parse(response.data.data.substring(11));
+				let body = {
+					qs: result.qs,
+					sid: result.sid,
+					_sign: result._sign,
+					callback: result.callback,
+					user: "18845613469",
+					hash: crypto
+						.hashDigest({
+							data: "LiYiFan000312",
+							algo: "MD5",
+						})
+						.toUpperCase()
+						.padEnd(32, "0"),
+					_json: "true",
+				};
+
+				resolve(body);
+			}).catch(error => {
+				console.error(error)
+				reject();
 			});
-		} catch (error) {
-			this.response = error;
-		}
+		})
 	},
+	async doLogin(header, body) {
+		return new Promise((resolve, reject) => {
+			const loginUrl = "https://account.xiaomi.com/pass/serviceLoginAuth2";
+			fetch.fetch({
+				url: loginUrl,
+				data: body,
+				method: "POST",
+				header: {
+					...header,
+					"Content-Type":"application/x-www-form-urlencoded"
+				},
+			}).then((rsp) => {
+				let authorize = {};
+				let result = JSON.parse(rsp.data.data.substring(11));
+				if (result.code != '0') {
+					reject(result);
+				} else {
+					let setCookieHeader = rsp.data.headers['Set-Cookie'];
+					const parts = setCookieHeader.split('; ');
+					parts.forEach(cookie => {
+						let thisCookie = cookie.split('=');
+						authorize[thisCookie[0]] = thisCookie[1];
+					})
+				}
+				
+				authorize.code = 0;
+				authorize.userId = result.userId;
+				authorize.securityToken = result.ssecurity;
+				authorize.message = '成功';
+				resolve(authorize);
+			}).catch(error => {
+				console.error(error);
+				reject()
+			});
+		})
+	},
+	async saveAuthorize(text) {
+		return new Promise((resolve, reject) => {
+			file.writeText({
+				uri: 'internal://files/authorize.json',
+				text: JSON.stringify(authorize),
+				success: () => {
+					resolve()
+				},
+				fail: (data, code) => {
+					console.error(`cannot write file, error code: ${code}`)
+					reject()
+				}
+			})
+		})
+	},
+	lightOn() {
+
+	},
+	lightOff() {
+
+	},
+	deviceSet() {
+		file.readText({
+			uri: "internal://files/authorize.json",
+			success: ({text}) => {
+				let authorize = JSON.parse(text);
+			}
+		})
+	},
+	onReady() {
+		
+	}
 };
 </script>
 
